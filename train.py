@@ -21,6 +21,7 @@ import json
 from copy import deepcopy
 from typing import NamedTuple
 from tqdm import tqdm
+import torch_xla.core.xla_model as xm
 
 import torch
 import torch.nn as nn
@@ -86,7 +87,8 @@ class Trainer(object):
             self.optimizer.zero_grad()
             final_loss, sup_loss, unsup_loss = get_loss(model, sup_batch, unsup_batch, global_step)
             final_loss.backward()
-            self.optimizer.step()
+            # self.optimizer.step()
+            xm.optimizer_step(self.optimizer, barrier=True)
 
             # print loss
             global_step += 1
