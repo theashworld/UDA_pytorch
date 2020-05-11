@@ -152,7 +152,7 @@ def main(cfg, model_cfg):
             torch.set_default_tensor_type('torch.FloatTensor')
             trainer.train(get_loss, None, cfg.model_file, cfg.pretrain_file)  
         import torch_xla.distributed.xla_multiprocessing as xmp
-        xmp.spawn(_mp_fn, args=(), nprocs=8,
+        xmp.spawn(_mp_fn, args=(), nprocs=1,
           start_method='fork')
 
 

@@ -51,7 +51,7 @@ def get_device():
 def _get_device(target=None):
     if torch.cuda.is_available():
         device = torch.device("cuda")
-    else
+    else:
         device = target
     return device
 
