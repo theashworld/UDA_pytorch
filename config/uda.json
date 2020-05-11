@@ -17,7 +17,7 @@
     "uda_softmax_temp": 0.85,
     "uda_confidence_thresh": 0.45,
 
-    "data_parallel": true,
+    "data_parallel": false,
     "need_prepro": false,
     "sup_data_dir": "data/imdb_sup_train.txt",
     "unsup_data_dir": "data/imdb_unsup_train.txt",

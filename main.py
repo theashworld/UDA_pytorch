@@ -145,6 +145,7 @@ def main(cfg, model_cfg):
 
         return accuracy, result
 
+    torch.set_default_tensor_type('torch.FloatTensor')
     if cfg.mode == 'train':
         trainer.train(get_loss, None, cfg.model_file, cfg.pretrain_file)
 
