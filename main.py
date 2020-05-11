@@ -148,7 +148,7 @@ def main(cfg, model_cfg):
         return accuracy, result
 
     if cfg.mode == 'train':
-        def _mp_fn(rank, flags):
+        def _mp_fn(rank):
             torch.set_default_tensor_type('torch.FloatTensor')
             trainer.train(get_loss, None, cfg.model_file, cfg.pretrain_file)  
         import torch_xla.distributed.xla_multiprocessing as xmp
