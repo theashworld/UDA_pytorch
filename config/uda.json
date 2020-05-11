@@ -3,7 +3,7 @@
     "lr": 2e-5,
     "warmup": 0.1,
     "do_lower_case": true,
-    "mode": "train_eval",
+    "mode": "train",
     "uda_mode": true,
 
     "total_steps": 10000,

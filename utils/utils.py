@@ -24,10 +24,11 @@ import logging
 
 import numpy as np
 import torch
+import torch_xla.core.xla_model as xm
 
 
-def torch_device_one():
-    return torch.tensor(1.).to(_get_device())
+def torch_device_one(target=None):
+    return torch.tensor(1.).to(_get_device(target))
 
 def set_seeds(seed):
     "set random seeds"
@@ -37,14 +38,21 @@ def set_seeds(seed):
     torch.cuda.manual_seed_all(seed)
 
 def get_device():
-    "get device (CPU or GPU)"
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    n_gpu = torch.cuda.device_count()
-    print("%s (%d GPUs)" % (device, n_gpu))
+    # "get device (CPU or GPU)"
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # n_gpu = torch.cuda.device_count()
+    # print("%s (%d GPUs)" % (device, n_gpu))
+    # return device
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    device = xm.xla_device()
     return device
 
-def _get_device():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def _get_device(target=None):
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    else
+        device = target
     return device
 
 def split_last(x, shape):

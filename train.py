@@ -21,6 +21,9 @@ import json
 from copy import deepcopy
 from typing import NamedTuple
 from tqdm import tqdm
+import torch_xla.core.xla_model as xm
+import torch_xla.distributed.parallel_loader as pl
+import torch_xla.distributed.xla_multiprocessing as xmp
 
 import torch
 import torch.nn as nn
@@ -82,11 +85,19 @@ class Trainer(object):
                 sup_batch = [t.to(self.device) for t in batch]
                 unsup_batch = None
 
-            # update
-            self.optimizer.zero_grad()
-            final_loss, sup_loss, unsup_loss = get_loss(model, sup_batch, unsup_batch, global_step)
-            final_loss.backward()
-            self.optimizer.step()
+            # device = xm.xla_device()
+            # para_loader = pl.ParallelLoader(, [device])
+
+            device = xm.xla_device()
+            para_loader = pl.ParallelLoader(batch, [device])
+            for data, target in para_loader.per_device_loader(device):
+                # update
+                self.optimizer.zero_grad()
+                # TODO send target to get_loss
+                final_loss, sup_loss, unsup_loss = get_loss(model, sup_batch, unsup_batch, global_step, target=target)
+                final_loss.backward()
+                # self.optimizer.step()
+                xm.optimizer_step(self.optimizer)
 
             # print loss
             global_step += 1

@@ -26,7 +26,7 @@ from utils import optim, configuration
 
 
 # TSA
-def get_tsa_thresh(schedule, global_step, num_train_steps, start, end):
+def get_tsa_thresh(schedule, global_step, num_train_steps, start, end, target=None):
     training_progress = torch.tensor(float(global_step) / float(num_train_steps))
     if schedule == 'linear_schedule':
         threshold = training_progress
@@ -37,7 +37,7 @@ def get_tsa_thresh(schedule, global_step, num_train_steps, start, end):
         scale = 5
         threshold = 1 - torch.exp((-training_progress) * scale)
     output = threshold * (end - start) + start
-    return output.to(_get_device())
+    return output.to(_get_device(target))
 
 
 def main(cfg, model_cfg):
@@ -60,10 +60,11 @@ def main(cfg, model_cfg):
     model = models.Classifier(model_cfg, len(data.TaskDataset.labels))
 
     # Create trainer
+    # TODO why is this optim for GPU and do we need a different one for TPU?
     trainer = train.Trainer(cfg, model, data_iter, optim.optim4GPU(cfg, model), get_device())
 
     # Training
-    def get_loss(model, sup_batch, unsup_batch, global_step):
+    def get_loss(model, sup_batch, unsup_batch, global_step, target=None):
 
         # logits -> prob(softmax) -> log_prob(log_softmax)
 
@@ -84,11 +85,11 @@ def main(cfg, model_cfg):
         sup_size = label_ids.shape[0]            
         sup_loss = sup_criterion(logits[:sup_size], label_ids)  # shape : train_batch_size
         if cfg.tsa:
-            tsa_thresh = get_tsa_thresh(cfg.tsa, global_step, cfg.total_steps, start=1./logits.shape[-1], end=1)
+            tsa_thresh = get_tsa_thresh(cfg.tsa, global_step, cfg.total_steps, start=1./logits.shape[-1], end=1, target=target)
             larger_than_threshold = torch.exp(-sup_loss) > tsa_thresh   # prob = exp(log_prob), prob > tsa_threshold
             # larger_than_threshold = torch.sum(  F.softmax(pred[:sup_size]) * torch.eye(num_labels)[sup_label_ids]  , dim=-1) > tsa_threshold
             loss_mask = torch.ones_like(label_ids, dtype=torch.float32) * (1 - larger_than_threshold.type(torch.float32))
-            sup_loss = torch.sum(sup_loss * loss_mask, dim=-1) / torch.max(torch.sum(loss_mask, dim=-1), torch_device_one())
+            sup_loss = torch.sum(sup_loss * loss_mask, dim=-1) / torch.max(torch.sum(loss_mask, dim=-1), torch_device_one(target))
         else:
             sup_loss = torch.mean(sup_loss)
 
@@ -106,7 +107,7 @@ def main(cfg, model_cfg):
                     unsup_loss_mask = unsup_loss_mask.type(torch.float32)
                 else:
                     unsup_loss_mask = torch.ones(len(logits) - sup_size, dtype=torch.float32)
-                unsup_loss_mask = unsup_loss_mask.to(_get_device())
+                unsup_loss_mask = unsup_loss_mask.to(_get_device(target))
                     
             # aug
             # softmax temperature controlling
@@ -126,6 +127,7 @@ def main(cfg, model_cfg):
                 https://github.com/google-research/uda/blob/master/text/uda.py#L175
             """
             unsup_loss = torch.sum(unsup_criterion(aug_log_prob, ori_prob), dim=-1)
+            # TODO use taget here in devices-ones
             unsup_loss = torch.sum(unsup_loss * unsup_loss_mask, dim=-1) / torch.max(torch.sum(unsup_loss_mask, dim=-1), torch_device_one())
             final_loss = sup_loss + cfg.uda_coeff*unsup_loss
 
@@ -146,7 +148,13 @@ def main(cfg, model_cfg):
         return accuracy, result
 
     if cfg.mode == 'train':
-        trainer.train(get_loss, None, cfg.model_file, cfg.pretrain_file)
+        def _mp_fn(rank, flags):
+            torch.set_default_tensor_type('torch.FloatTensor')
+            trainer.train(get_loss, None, cfg.model_file, cfg.pretrain_file)  
+        import torch_xla.distributed.xla_multiprocessing as xmp
+        xmp.spawn(_mp_fn, args=(), nprocs=8,
+          start_method='fork')
+
 
     if cfg.mode == 'train_eval':
         trainer.train(get_loss, get_acc, cfg.model_file, cfg.pretrain_file)
